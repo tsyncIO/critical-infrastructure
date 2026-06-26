@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% block title %}Infrastructure Dependencies – KRITIS Lab{% endblock %}
+
+{% block content %}
+<div class="page-header fade-in">
+  <h1>🕸 Infrastructure Dependency Graph</h1>
+  <p>Synthetic critical-infrastructure dependency model. Components and edges are documented research configurations, not real operational data.</p>
+</div>
+
+<div class="row g-4 fade-in">
+  <div class="col-md-8">
+    <div class="kcard">
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(6,182,212,.15);">🔗</div>
+        <h5>Dependency Graph</h5>
+        <div class="ms-auto d-flex gap-2">
+          <div style="font-size:.75rem;color:var(--text-muted);">Click a node to analyze impact</div>
+        </div>
+      </div>
+      <div id="dependency-graph" style="height:560px;border-radius:var(--radius-md);background:var(--bg-surface);"></div>
+      <div id="impact-panel" class="mt-3" style="display:none;">
+        <div class="kalert kalert-info" id="impact-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="kcard mb-4">
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(59,130,246,.15);">🏗</div>
+        <h5>Components</h5>
+      </div>
+      {% for comp in components %}
+      <div style="padding:.5rem 0;border-bottom:1px solid var(--border);font-size:.875rem;">
+        <div style="font-weight:600;color:var(--text-primary);">{{ comp.display_name }}</div>
+        <div style="font-size:.75rem;color:var(--accent-cyan);">{{ comp.sector }}</div>
+        <div style="font-size:.75rem;color:var(--text-muted);margin-top:.1rem;">{{ comp.description }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="kcard">
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(245,158,11,.15);">⚠️</div>
+        <h5>Dependencies</h5>
+      </div>
+      {% for dep in dependencies %}
+      <div style="padding:.4rem 0;border-bottom:1px solid var(--border);font-size:.8rem;">
+        <span style="color:var(--accent-cyan);">{{ dep.source_component.display_name }}</span>
+        <span style="color:var(--text-muted);margin:0 .3rem;">→</span>
+        <span style="color:var(--text-primary);">{{ dep.target_component.display_name }}</span>
+        <span class="meta-chip ms-1"
+              style="font-size:.7rem;{% if dep.criticality == 'high' %}color:#fca5a5{% elif dep.criticality == 'medium' %}color:#fcd34d{% else %}color:#6ee7b7{% endif %}">
+          {{ dep.criticality }}
+        </span>
+      </div>
+      {% endfor %}
+      <div class="kalert kalert-warning mt-3" style="font-size:.75rem;">
+        Synthetic research configuration. Not real dependency data.
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+<script>
+const SECTOR_COLORS = {
+  'Energy': '#f59e0b',
+  'Industrial control': '#8b5cf6',
+  'Technical infrastructure': '#06b6d4',
+  'Production / service process': '#3b82f6',
+  'Maritime critical infrastructure': '#10b981',
+  'Information and communication': '#ec4899',
+  'Municipal infrastructure': '#14b8a6',
+  'Civil protection': '#ef4444',
+};
+
+fetch('/api/dependencies/graph')
+  .then(r => r.json())
+  .then(data => {
+    const elements = [];
+    data.nodes.forEach(n => {
+      elements.push({ data: { id: n.id, label: n.label, sector: n.sector } });
+    });
+    data.edges.forEach(e => {
+      elements.push({ data: { id: e.id, source: e.source, target: e.target, criticality: e.criticality, label: e.dependency_type } });
+    });
+
+    const cy = cytoscape({
+      container: document.getElementById('dependency-graph'),
+      elements,
+      style: [
+        {
+          selector: 'node',
+          style: {
+            'label': 'data(label)',
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'color': '#e2e8f0',
+            'background-color': ele => SECTOR_COLORS[ele.data('sector')] || '#3b82f6',
+            'width': 'label',
+            'height': 'label',
+            'padding': '14px',
+            'text-wrap': 'wrap',
+            'text-max-width': '110px',
+            'font-family': 'Inter, sans-serif',
+            'font-size': '11px',
+            'font-weight': '600',
+            'border-width': '2px',
+            'border-color': 'rgba(255,255,255,0.2)',
+            'transition-property': 'background-color, border-color',
+            'transition-duration': '0.2s',
+          }
+        },
+        {
+          selector: 'node:selected',
+          style: {
+            'border-color': '#ffffff',
+            'border-width': '3px',
+            'box-shadow': '0 0 16px rgba(255,255,255,0.4)',
+          }
+        },
+        {
+          selector: 'edge',
+          style: {
+            'curve-style': 'bezier',
+            'target-arrow-shape': 'triangle',
+            'arrow-scale': 1.2,
+            'line-color': ele => ele.data('criticality') === 'high' ? '#ef4444' : ele.data('criticality') === 'medium' ? '#f59e0b' : '#64748b',
+            'target-arrow-color': ele => ele.data('criticality') === 'high' ? '#ef4444' : ele.data('criticality') === 'medium' ? '#f59e0b' : '#64748b',
+            'width': ele => ele.data('criticality') === 'high' ? 2.5 : 1.5,
+            'opacity': 0.75,
+          }
+        },
+      ],
+      layout: { name: 'cose', idealEdgeLength: 150, nodeOverlap: 30, refresh: 20, fit: true, padding: 30 },
+    });
+
+    cy.on('tap', 'node', function(evt) {
+      const nodeId = evt.target.id();
+      fetch(`/api/dependencies/impact/${nodeId}?severity=critical`)
+        .then(r => r.json())
+        .then(data => {
+          const panel = document.getElementById('impact-panel');
+          const result = document.getElementById('impact-result');
+          const riskColor = data.risk === 'high' ? '#fca5a5' : data.risk === 'medium' ? '#fcd34d' : '#6ee7b7';
+          result.innerHTML = `
+            <strong style="color:${riskColor};">Impact Analysis: ${data.display_name}</strong><br>
+            Risk Level: <strong style="color:${riskColor};">${data.risk?.toUpperCase()}</strong><br>
+            Downstream: ${data.downstream_components.length ? data.downstream_components.map(c => `<code>${c}</code>`).join(' → ') : 'none'}
+          `;
+          panel.style.display = '';
+        });
+    });
+  });
+</script>
+{% endblock %}

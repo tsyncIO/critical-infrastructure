@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+{% block title %}Readiness Assessment – KRITIS Lab{% endblock %}
+
+{% block content %}
+<div class="page-header fade-in">
+  <h1>📋 Crisis Readiness Assessment</h1>
+  <p>Score your organisation's crisis readiness based on BCM and critical-infrastructure preparedness criteria.</p>
+</div>
+
+<div class="row g-4">
+  <!-- Assessment Form -->
+  <div class="col-md-7 fade-in">
+    <div class="kcard">
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(139,92,246,.15);">📝</div>
+        <h5>Assessment Questions</h5>
+      </div>
+      <form id="readiness-form">
+        {% for q in questions %}
+        <div class="readiness-question">
+          <div class="d-flex justify-content-between">
+            <div class="question-category">{{ q.category }}</div>
+            <div class="question-weight mono">weight × {{ q.weight }}</div>
+          </div>
+          <div class="question-text">{{ q.question_text }}</div>
+          <div class="answer-options">
+            <input type="radio" class="answer-radio" name="{{ q.question_key }}" id="{{ q.question_key }}_yes" value="yes">
+            <label class="answer-label" for="{{ q.question_key }}_yes">✓ Yes</label>
+
+            <input type="radio" class="answer-radio" name="{{ q.question_key }}" id="{{ q.question_key }}_partial" value="partial">
+            <label class="answer-label" for="{{ q.question_key }}_partial">⚬ Partial</label>
+
+            <input type="radio" class="answer-radio" name="{{ q.question_key }}" id="{{ q.question_key }}_no" value="no">
+            <label class="answer-label" for="{{ q.question_key }}_no">✗ No</label>
+
+            <input type="radio" class="answer-radio" name="{{ q.question_key }}" id="{{ q.question_key }}_unknown" value="unknown">
+            <label class="answer-label" for="{{ q.question_key }}_unknown">? Unknown</label>
+          </div>
+        </div>
+        {% endfor %}
+
+        <div class="mb-3 mt-3">
+          <label class="filter-label mb-1" for="assessment-title">Assessment Title</label>
+          <input id="assessment-title" type="text" class="kinput w-100" placeholder="e.g. Q2 2026 Review" value="Readiness Assessment" />
+        </div>
+        <button type="submit" class="kbtn kbtn-primary" style="width:100%;justify-content:center;padding:.65rem;">
+          📊 Calculate Score
+        </button>
+      </form>
+      <div id="form-result" class="mt-3"></div>
+    </div>
+  </div>
+
+  <!-- Results Panel -->
+  <div class="col-md-5 fade-in">
+    <div class="kcard mb-4" id="score-panel" {% if not latest %}style="display:none;"{% endif %}>
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(16,185,129,.15);">🎯</div>
+        <h5>Latest Score</h5>
+      </div>
+      <div id="score-display" style="text-align:center;padding:.5rem 0;">
+        {% if latest %}
+        <div class="stat-value" id="score-pct" style="font-size:3rem;
+          {% if latest.percentage_score >= 75 %}color:var(--accent-green)
+          {% elif latest.percentage_score >= 50 %}color:var(--accent-amber)
+          {% else %}color:var(--accent-red){% endif %}">
+          {{ latest.percentage_score | round(1) }}%
+        </div>
+        <div class="stat-sub mt-1" id="score-title">{{ latest.title }}</div>
+        {% endif %}
+      </div>
+      <div class="score-meter mt-2 mb-3">
+        <div class="score-fill" id="score-fill" style="width:{% if latest %}{{ latest.percentage_score }}{% else %}0{% endif %}%;"></div>
+      </div>
+      <div id="score-breakdown"></div>
+    </div>
+
+    <div class="kcard">
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(245,158,11,.15);">ℹ️</div>
+        <h5>Scoring Rules</h5>
+      </div>
+      <table class="ktable">
+        <thead><tr><th>Answer</th><th>Score</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge-severity badge-normal">Yes</span></td><td class="mono">1.0 × weight</td></tr>
+          <tr><td><span class="badge-severity badge-warning">Partial</span></td><td class="mono">0.5 × weight</td></tr>
+          <tr><td><span class="badge-severity badge-critical">No</span></td><td class="mono">0.0 × weight</td></tr>
+          <tr><td><span style="color:var(--text-muted);">Unknown</span></td><td class="mono">0.0 × weight</td></tr>
+        </tbody>
+      </table>
+      <div class="kalert kalert-info mt-3" style="font-size:.8rem;">
+        Final score = weighted sum ÷ max possible score × 100
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.getElementById('readiness-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const answers = [];
+  {% for q in questions %}
+  const val_{{ loop.index }} = document.querySelector('input[name="{{ q.question_key }}"]:checked');
+  if (val_{{ loop.index }}) answers.push({ question_key: '{{ q.question_key }}', answer_value: val_{{ loop.index }}.value });
+  {% endfor %}
+
+  if (!answers.length) {
+    document.getElementById('form-result').innerHTML =
+      '<div class="kalert kalert-warning">Please answer at least one question.</div>';
+    return;
+  }
+
+  const title = document.getElementById('assessment-title').value || 'Readiness Assessment';
+  const btn = e.submitter;
+  btn.disabled = true;
+  btn.textContent = '⏳ Calculating…';
+
+  fetch('/api/readiness/assess', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, answers }),
+  })
+    .then(r => r.json())
+    .then(data => {
+      const pct = data.percentage_score || 0;
+      const color = pct >= 75 ? 'var(--accent-green)' : pct >= 50 ? 'var(--accent-amber)' : 'var(--accent-red)';
+      const verdict = pct >= 75 ? '✅ Good readiness' : pct >= 50 ? '⚠️ Partial readiness' : '❌ Readiness gaps detected';
+      document.getElementById('score-panel').style.display = '';
+      document.getElementById('score-pct').textContent = pct.toFixed(1) + '%';
+      document.getElementById('score-pct').style.color = color;
+      document.getElementById('score-title').textContent = data.title;
+      document.getElementById('score-fill').style.width = pct + '%';
+      document.getElementById('score-breakdown').innerHTML = `
+        <div class="kalert ${pct >= 75 ? 'kalert-success' : pct >= 50 ? 'kalert-warning' : 'kalert-danger'}">
+          <strong>${verdict}</strong><br>
+          Score: ${data.total_score?.toFixed(2)} / ${data.max_score?.toFixed(2)} weighted points
+        </div>`;
+      document.getElementById('form-result').innerHTML =
+        '<div class="kalert kalert-success">Assessment submitted. See score on the right.</div>';
+      btn.disabled = false;
+      btn.textContent = '📊 Calculate Score';
+    })
+    .catch(err => {
+      document.getElementById('form-result').innerHTML = `<div class="kalert kalert-danger">${err.message}</div>`;
+      btn.disabled = false;
+      btn.textContent = '📊 Calculate Score';
+    });
+});
+</script>
+{% endblock %}

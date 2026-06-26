@@ -1,0 +1,51 @@
+[
+  {
+    "source": "emergency_power",
+    "target": "process_control_system",
+    "dependency_type": "power_dependency",
+    "criticality": "high",
+    "description": "The process control system requires power or backup power to remain available."
+  },
+  {
+    "source": "process_control_system",
+    "target": "cooling_system",
+    "dependency_type": "control_dependency",
+    "criticality": "high",
+    "description": "Cooling-system control depends on the availability of the process control layer."
+  },
+  {
+    "source": "cooling_system",
+    "target": "industrial_process",
+    "dependency_type": "technical_dependency",
+    "criticality": "high",
+    "description": "Cooling degradation can destabilize industrial process operation."
+  },
+  {
+    "source": "industrial_process",
+    "target": "port_operations",
+    "dependency_type": "service_dependency",
+    "criticality": "medium",
+    "description": "Industrial process instability can reduce operational service availability."
+  },
+  {
+    "source": "port_operations",
+    "target": "municipal_crisis_coordination",
+    "dependency_type": "coordination_dependency",
+    "criticality": "medium",
+    "description": "Severe disruption in port operations requires crisis coordination."
+  },
+  {
+    "source": "communication_system",
+    "target": "municipal_crisis_coordination",
+    "dependency_type": "communication_dependency",
+    "criticality": "high",
+    "description": "Crisis coordination requires functioning communication channels."
+  },
+  {
+    "source": "water_supply",
+    "target": "municipal_crisis_coordination",
+    "dependency_type": "municipal_dependency",
+    "criticality": "medium",
+    "description": "Water-supply disruption can become a municipal crisis-management concern."
+  }
+]

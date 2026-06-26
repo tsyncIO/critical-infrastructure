@@ -1,0 +1,38 @@
+[
+  {
+    "question_key": "incident_response_plan",
+    "question_text": "Is there a documented critical incident response plan for the operation?",
+    "category": "Governance",
+    "weight": 1.5
+  },
+  {
+    "question_key": "communication_drills",
+    "question_text": "Are communication drills conducted regularly with internal and external stakeholders?",
+    "category": "Preparedness",
+    "weight": 1.2
+  },
+  {
+    "question_key": "backup_power",
+    "question_text": "Is emergency power and backup supply tested and available?",
+    "category": "Resilience",
+    "weight": 1.3
+  },
+  {
+    "question_key": "dependency_mapping",
+    "question_text": "Has the organization mapped dependencies between critical components and external services?",
+    "category": "Preparedness",
+    "weight": 1.0
+  },
+  {
+    "question_key": "incident_review",
+    "question_text": "Are incidents reviewed after closure to capture lessons learned?",
+    "category": "Governance",
+    "weight": 1.0
+  },
+  {
+    "question_key": "data_quality",
+    "question_text": "Is there regular validation of sensor data quality and anomaly detection rules?",
+    "category": "Technical",
+    "weight": 1.1
+  }
+]

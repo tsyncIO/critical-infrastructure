@@ -1,0 +1,14 @@
+Flask
+Flask-SQLAlchemy
+Flask-Migrate
+SQLAlchemy
+psycopg2-binary
+python-dotenv
+pandas
+numpy
+pyreadr
+pytest
+pytest-flask
+requests
+psutil
+tabulate

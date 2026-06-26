@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% block title %}Incidents – KRITIS Lab{% endblock %}
+
+{% block content %}
+<div class="page-header fade-in">
+  <h1>🔥 Incidents</h1>
+  <p>Grouped alarm clusters representing infrastructure disruption events from the Tennessee Eastman Process data.</p>
+</div>
+
+{% if incidents %}
+<div class="row mb-3 g-3 fade-in">
+  <div class="col-md-4">
+    <div class="stat-card">
+      <div class="stat-label">Total Incidents</div>
+      <div class="stat-value">{{ incidents | length }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="stat-card">
+      <div class="stat-label">Critical</div>
+      <div class="stat-value text-red">{{ incidents | selectattr('severity', 'equalto', 'critical') | list | length }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="stat-card">
+      <div class="stat-label">Warning</div>
+      <div class="stat-value text-amber">{{ incidents | selectattr('severity', 'equalto', 'warning') | list | length }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="fade-in" id="incident-list">
+  {% for incident in incidents %}
+  <div class="incident-card {{ incident.severity }}" id="incident-{{ incident.id }}">
+    <div class="d-flex justify-content-between align-items-start mb-2">
+      <div>
+        <strong style="font-size:1rem;">{{ incident.title }}</strong>
+        <div class="text-muted" style="font-size:.75rem;margin-top:.1rem;">ID #{{ incident.id }} &middot; {{ incident.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+      </div>
+      <div class="d-flex gap-2 align-items-center">
+        <span class="badge-severity badge-{{ incident.severity }}">{{ incident.severity }}</span>
+        <span class="meta-chip" style="{% if incident.status == 'open' %}color:var(--accent-amber){% else %}color:var(--accent-green){% endif %}">{{ incident.status }}</span>
+      </div>
+    </div>
+
+    <p style="font-size:.875rem;color:var(--text-secondary);margin-bottom:.75rem;">{{ incident.explanation }}</p>
+
+    <div class="incident-meta mb-3">
+      <span class="meta-chip">⏱ t={{ incident.first_time_step }}–{{ incident.last_time_step }}</span>
+      <span class="meta-chip">🔔 {{ incident.raw_alarm_count }} raw alarms</span>
+      <span class="meta-chip">🔍 {{ incident.unique_alarm_count }} unique types</span>
+      <span class="meta-chip">🏭 {{ incident.affected_component_count }} component(s)</span>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button class="kbtn kbtn-primary"
+              onclick="runSimulation({{ incident.id }}, this)"
+              id="sim-btn-{{ incident.id }}">
+        ⚙️ Run Simulation
+      </button>
+      <a href="{{ url_for('pages.simulation') }}?incident={{ incident.id }}" class="kbtn kbtn-secondary">
+        📊 View Simulations
+      </a>
+    </div>
+
+    <div id="sim-result-{{ incident.id }}" style="display:none;margin-top:1rem;"></div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="kalert kalert-info fade-in">
+  No incidents found. Run the alarm pipeline first:<br>
+  <code>flask kritis generate-alarms --role faulty_testing</code><br>
+  <code>flask kritis filter-alarms</code><br>
+  <code>flask kritis group-incidents</code>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function runSimulation(incidentId, btn) {
+  const resultDiv = document.getElementById('sim-result-' + incidentId);
+  btn.disabled = true;
+  btn.textContent = '⏳ Running…';
+  fetch(`/api/incidents/${incidentId}/simulate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scenario_name: 'default' }),
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        resultDiv.innerHTML = `<div class="kalert kalert-danger">Error: ${data.error}</div>`;
+      } else {
+        const riskClass = { high: 'risk-high', medium: 'risk-medium', low: 'risk-low' }[data.continuity_risk] || 'risk-low';
+        const impactRows = (data.impacts || []).map(ev =>
+          `<tr>
+            <td class="mono">+${ev.minute_offset} min</td>
+            <td style="color:var(--accent-cyan);">${ev.component_key.replace(/_/g,' ')}</td>
+            <td><span class="badge-severity badge-${ ev.impact_level === 'severe' ? 'critical' : 'warning' }">${ev.impact_level}</span></td>
+            <td style="font-size:.8rem;color:var(--text-secondary);">${ev.message}</td>
+          </tr>`
+        ).join('');
+        resultDiv.innerHTML = `
+          <div class="kcard" style="border-color:var(--border-light);">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <strong>Simulation #${data.simulation_id}</strong>
+              <span class="risk-indicator ${riskClass}">⚠ ${data.continuity_risk?.toUpperCase()} RISK</span>
+            </div>
+            <div class="kalert kalert-warning mb-2">
+              <div><strong>BCM Recommendation:</strong> ${data.recommendation}</div>
+              <div style="font-size:.8rem;margin-top:.3rem;">Estimated interruption: <strong>${data.estimated_interruption_min} min</strong></div>
+            </div>
+            <div class="table-responsive">
+              <table class="ktable"><thead><tr><th>Offset</th><th>Component</th><th>Impact</th><th>Message</th></tr></thead>
+              <tbody>${impactRows}</tbody></table>
+            </div>
+          </div>`;
+      }
+      resultDiv.style.display = 'block';
+      btn.textContent = '⚙️ Re-run Simulation';
+      btn.disabled = false;
+    })
+    .catch(err => {
+      resultDiv.innerHTML = `<div class="kalert kalert-danger">Network error: ${err.message}</div>`;
+      resultDiv.style.display = 'block';
+      btn.textContent = '⚙️ Run Simulation';
+      btn.disabled = false;
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,74 @@
+[
+  {
+    "component_key": "cooling_system",
+    "maximum_tolerable_downtime_min": 60,
+    "recovery_time_objective_min": 30,
+    "backup_available": true,
+    "backup_duration_min": 45,
+    "recovery_action": "Activate backup cooling procedure and dispatch technical maintenance team.",
+    "emergency_contact_role": "Technical operations lead"
+  },
+  {
+    "component_key": "industrial_process",
+    "maximum_tolerable_downtime_min": 90,
+    "recovery_time_objective_min": 45,
+    "backup_available": false,
+    "backup_duration_min": 0,
+    "recovery_action": "Reduce process load and prepare controlled shutdown if instability persists.",
+    "emergency_contact_role": "Process operations lead"
+  },
+  {
+    "component_key": "port_operations",
+    "maximum_tolerable_downtime_min": 120,
+    "recovery_time_objective_min": 60,
+    "backup_available": true,
+    "backup_duration_min": 90,
+    "recovery_action": "Switch to manual coordination and prioritize critical port services.",
+    "emergency_contact_role": "Port operations coordinator"
+  },
+  {
+    "component_key": "municipal_crisis_coordination",
+    "maximum_tolerable_downtime_min": 30,
+    "recovery_time_objective_min": 15,
+    "backup_available": true,
+    "backup_duration_min": 180,
+    "recovery_action": "Activate crisis staff communication protocol and establish situation report workflow.",
+    "emergency_contact_role": "Municipal crisis staff lead"
+  },
+  {
+    "component_key": "process_control_system",
+    "maximum_tolerable_downtime_min": 45,
+    "recovery_time_objective_min": 20,
+    "backup_available": true,
+    "backup_duration_min": 60,
+    "recovery_action": "Switch control monitoring to backup workstation and verify controller communication.",
+    "emergency_contact_role": "Control system engineer"
+  },
+  {
+    "component_key": "communication_system",
+    "maximum_tolerable_downtime_min": 30,
+    "recovery_time_objective_min": 15,
+    "backup_available": true,
+    "backup_duration_min": 120,
+    "recovery_action": "Use alternate communication channel and notify coordination partners.",
+    "emergency_contact_role": "IT and communication lead"
+  },
+  {
+    "component_key": "emergency_power",
+    "maximum_tolerable_downtime_min": 15,
+    "recovery_time_objective_min": 5,
+    "backup_available": true,
+    "backup_duration_min": 240,
+    "recovery_action": "Start emergency generator and verify fuel/runtime status.",
+    "emergency_contact_role": "Facility security lead"
+  },
+  {
+    "component_key": "water_supply",
+    "maximum_tolerable_downtime_min": 180,
+    "recovery_time_objective_min": 90,
+    "backup_available": true,
+    "backup_duration_min": 120,
+    "recovery_action": "Coordinate with municipal water utility and check emergency supply capacity.",
+    "emergency_contact_role": "Municipal utility coordinator"
+  }
+]

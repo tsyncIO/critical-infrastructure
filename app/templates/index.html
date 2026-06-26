@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard – KRITIS Alarm & Dependency Lab{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.30.0/dist/plotly.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-header fade-in">
+  <h1>KRITIS Alarm &amp; Dependency Lab</h1>
+  <p>A PostgreSQL-backed research prototype using Tennessee Eastman Process data for alarm analysis and critical-infrastructure crisis simulation.</p>
+</div>
+
+<!-- Stat Cards -->
+<div class="row g-3 mb-4 fade-in">
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card">
+      <div class="stat-label">TEP Runs</div>
+      <div class="stat-value" id="stat-runs">{{ summary.total_runs }}</div>
+      <div class="stat-sub">ingested</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card">
+      <div class="stat-label">Alarms</div>
+      <div class="stat-value" id="stat-alarms">{{ summary.total_alarms }}</div>
+      <div class="stat-sub">generated</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card">
+      <div class="stat-label">Critical</div>
+      <div class="stat-value text-red" id="stat-critical">{{ summary.critical_alarms }}</div>
+      <div class="stat-sub">critical alarms</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card">
+      <div class="stat-label">Incidents</div>
+      <div class="stat-value text-amber" id="stat-incidents">{{ summary.total_incidents }}</div>
+      <div class="stat-sub">open incidents</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card">
+      <div class="stat-label">Simulations</div>
+      <div class="stat-value text-cyan" id="stat-sims">{{ summary.total_simulations }}</div>
+      <div class="stat-sub">runs completed</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card">
+      <div class="stat-label">Readiness</div>
+      <div class="stat-value text-green" id="stat-readiness">
+        {% if summary.latest_readiness %}{{ summary.latest_readiness.percentage_score | round(0) | int }}%{% else %}—{% endif %}
+      </div>
+      <div class="stat-sub">latest score</div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row g-4 mb-4 fade-in">
+  <div class="col-md-6">
+    <div class="kcard">
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(59,130,246,.15);">🚨</div>
+        <h5>Alarms by Severity</h5>
+      </div>
+      <div id="chart-alarm-severity" style="height:260px;"></div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="kcard">
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(245,158,11,.15);">🔥</div>
+        <h5>Incidents by Component</h5>
+      </div>
+      <div id="chart-incidents-component" style="height:260px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Activity + Readiness -->
+<div class="row g-4 fade-in">
+  <div class="col-md-8">
+    <div class="kcard">
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(16,185,129,.15);">📈</div>
+        <h5>Recent Incidents</h5>
+      </div>
+      {% if summary.recent_incidents %}
+        {% for inc in summary.recent_incidents %}
+        <div class="incident-card {{ inc.severity }}" style="margin-bottom:.75rem;">
+          <div class="d-flex justify-content-between align-items-start">
+            <strong style="font-size:.9375rem;">{{ inc.title }}</strong>
+            <span class="badge-severity badge-{{ inc.severity }}">{{ inc.severity }}</span>
+          </div>
+          <div class="incident-meta">
+            <span class="meta-chip">⏱ t={{ inc.first_time_step }}–{{ inc.last_time_step }}</span>
+            <span class="meta-chip">🔔 {{ inc.raw_alarm_count }} alarms</span>
+            <span class="meta-chip">{{ inc.status }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="kalert kalert-info">No incidents yet. Run the alarm pipeline to generate incidents.</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="kcard mb-4">
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(139,92,246,.15);">📋</div>
+        <h5>Latest Readiness</h5>
+      </div>
+      {% if summary.latest_readiness %}
+        <div style="text-align:center;padding:.5rem 0;">
+          <div class="stat-value" style="font-size:2.5rem;{% if summary.latest_readiness.percentage_score >= 75 %}color:var(--accent-green){% elif summary.latest_readiness.percentage_score >= 50 %}color:var(--accent-amber){% else %}color:var(--accent-red){% endif %}">
+            {{ summary.latest_readiness.percentage_score | round(1) }}%
+          </div>
+          <div class="stat-sub mt-1">{{ summary.latest_readiness.title }}</div>
+        </div>
+        <div class="score-meter mt-2">
+          <div class="score-fill" style="width:{{ summary.latest_readiness.percentage_score }}%;"></div>
+        </div>
+        <div class="text-muted mt-2" style="font-size:.75rem;">
+          {{ summary.latest_readiness.created_at.strftime('%Y-%m-%d %H:%M') }}
+        </div>
+      {% else %}
+        <div class="kalert kalert-info">No readiness assessment yet.</div>
+        <a href="{{ url_for('pages.readiness') }}" class="kbtn kbtn-primary mt-3" style="width:100%;justify-content:center;">Run Assessment</a>
+      {% endif %}
+    </div>
+    <div class="kcard">
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(6,182,212,.15);">ℹ️</div>
+        <h5>Data Scope</h5>
+      </div>
+      <div style="font-size:.8125rem;color:var(--text-secondary);line-height:1.7;">
+        <div>📁 <strong style="color:var(--text-primary);">{{ summary.total_files }}</strong> RData files loaded</div>
+        <div>🔬 <strong style="color:var(--text-primary);">{{ summary.total_variables }}</strong> sensor variables</div>
+        <div>📊 <strong style="color:var(--text-primary);">{{ summary.total_observations }}</strong> observations</div>
+      </div>
+      <div class="kalert kalert-warning mt-3" style="font-size:.75rem;">
+        ⚠️ Tennessee Eastman Process data. Not real maritime infrastructure.
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const PLOTLY_DARK = {
+  paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+  font: { color: '#94a3b8', family: 'Inter, sans-serif', size: 12 },
+  margin: { t: 20, b: 40, l: 50, r: 20 },
+  legend: { bgcolor: 'transparent', borderwidth: 0 },
+};
+
+// Alarm severity chart
+fetch('/api/alarms?limit=2000')
+  .then(r => r.json())
+  .then(alarms => {
+    const counts = { critical: 0, warning: 0 };
+    alarms.forEach(a => { if (counts[a.severity] !== undefined) counts[a.severity]++; });
+    Plotly.newPlot('chart-alarm-severity', [{
+      type: 'bar',
+      x: ['Critical', 'Warning'],
+      y: [counts.critical, counts.warning],
+      marker: { color: ['#ef4444', '#f59e0b'] },
+      text: [counts.critical, counts.warning],
+      textposition: 'auto',
+    }], {
+      ...PLOTLY_DARK,
+      yaxis: { gridcolor: '#253148', title: 'Count' },
+      xaxis: { gridcolor: '#253148' },
+    }, { responsive: true, displayModeBar: false });
+  });
+
+// Incidents by component
+fetch('/api/incidents?limit=200')
+  .then(r => r.json())
+  .then(incidents => {
+    const compMap = {};
+    incidents.forEach(inc => {
+      const comp = inc.title || 'Unknown';
+      compMap[comp] = (compMap[comp] || 0) + 1;
+    });
+    const sorted = Object.entries(compMap).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    const colors = ['#3b82f6','#06b6d4','#8b5cf6','#10b981','#f59e0b','#ef4444','#ec4899','#14b8a6'];
+    Plotly.newPlot('chart-incidents-component', [{
+      type: 'bar', orientation: 'h',
+      x: sorted.map(s => s[1]),
+      y: sorted.map(s => s[0]),
+      marker: { color: colors.slice(0, sorted.length) },
+      text: sorted.map(s => s[1]),
+      textposition: 'auto',
+    }], {
+      ...PLOTLY_DARK,
+      xaxis: { gridcolor: '#253148', title: 'Count' },
+      yaxis: { gridcolor: '#253148', automargin: true },
+    }, { responsive: true, displayModeBar: false });
+  });
+</script>
+{% endblock %}

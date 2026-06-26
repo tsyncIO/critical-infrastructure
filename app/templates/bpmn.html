@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block title %}BPMN Crisis Process – KRITIS Lab{% endblock %}
+
+{% block content %}
+<div class="page-header fade-in">
+  <h1>🔄 Crisis Response BPMN Process</h1>
+  <p>Synthetic crisis-response process model visualising the alarm-to-crisis-coordination workflow. Rendered using bpmn-js.</p>
+</div>
+
+<div class="row g-4 fade-in">
+  <div class="col-md-9">
+    <div class="kcard">
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(59,130,246,.15);">📐</div>
+        <h5>Crisis Response Process</h5>
+        <div class="ms-auto d-flex gap-2">
+          <a href="{{ url_for('static', filename='bpmn/crisis_response.bpmn') }}" download class="kbtn kbtn-secondary" style="font-size:.8rem;">⬇ Download BPMN</a>
+        </div>
+      </div>
+      <div id="bpmn-viewer" style="height:620px;border-radius:var(--radius-md);overflow:hidden;background:#fff;"></div>
+      <div id="bpmn-error" class="kalert kalert-danger mt-3" style="display:none;"></div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="kcard mb-4">
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(16,185,129,.15);">📋</div>
+        <h5>Process Lanes</h5>
+      </div>
+      <div style="font-size:.875rem;">
+        {% set lanes = [
+          ('🖥', 'Monitoring System', 'Automated alarm detection and validation', 'var(--accent-blue)'),
+          ('🏭', 'Infrastructure Operator', 'Incident classification and component isolation', 'var(--accent-cyan)'),
+          ('🏛', 'Municipal Crisis Team', 'Continuity measure activation and coordination', 'var(--accent-amber)'),
+          ('🚨', 'External Support / Authority', 'Emergency response and authority notification', 'var(--accent-red)'),
+        ] %}
+        {% for icon, name, desc, color in lanes %}
+        <div style="padding:.6rem 0;border-bottom:1px solid var(--border);">
+          <div style="font-weight:600;color:{{ color }};">{{ icon }} {{ name }}</div>
+          <div style="font-size:.75rem;color:var(--text-muted);margin-top:.2rem;">{{ desc }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="kcard mb-4">
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(245,158,11,.15);">🔀</div>
+        <h5>Process Flow</h5>
+      </div>
+      <ol style="font-size:.8125rem;color:var(--text-secondary);padding-left:1.2rem;line-height:2;">
+        <li>Alarm received</li>
+        <li>Automated validation</li>
+        <li>Duplicate? → Group or Create incident</li>
+        <li>Identify affected infrastructure</li>
+        <li>Assess dependency impact</li>
+        <li>Critical risk? → Notify crisis team</li>
+        <li>Activate continuity measure</li>
+        <li>Update situation report</li>
+        <li>Close incident after recovery</li>
+      </ol>
+    </div>
+
+    <div class="kalert kalert-warning" style="font-size:.8rem;">
+      ⚠️ Synthetic research configuration. This BPMN model is not a validated operational procedure.
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://unpkg.com/bpmn-js@14.0.0/dist/bpmn-viewer.development.js"></script>
+<script>
+const viewer = new BpmnJS({ container: document.getElementById('bpmn-viewer') });
+fetch('{{ url_for("static", filename="bpmn/crisis_response.bpmn") }}')
+  .then(r => r.text())
+  .then(xml => viewer.importXML(xml).then(() => {
+    const canvas = viewer.get('canvas');
+    canvas.zoom('fit-viewport');
+  }))
+  .catch(err => {
+    document.getElementById('bpmn-viewer').style.display = 'none';
+    document.getElementById('bpmn-error').style.display = '';
+    document.getElementById('bpmn-error').textContent = 'Failed to load BPMN model: ' + err.message;
+  });
+</script>
+{% endblock %}

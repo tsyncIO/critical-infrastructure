@@ -1,0 +1,39 @@
+[
+    {
+        "test": "CPU",
+        "status": "PASS",
+        "cpu": 1.0
+    },
+    {
+        "test": "MEMORY",
+        "status": "PASS",
+        "memory": 9.0
+    },
+    {
+        "test": "NETWORK",
+        "status": "PASS"
+    },
+    {
+        "test": "THERMAL_SIM",
+        "status": "OK",
+        "cpu_temp_proxy": 0.2
+    },
+    {
+        "test": "BMC_REDFISH",
+        "status": "PASS",
+        "details": {
+            "@odata.type": "#ServiceRoot.v1_0_0.ServiceRoot",
+            "Chassis": {
+                "@odata.id": "/redfish/v1/Chassis"
+            },
+            "Id": "RootService",
+            "Name": "OpenBMC Redfish Service",
+            "Sensors": {
+                "@odata.id": "/redfish/v1/Sensors"
+            },
+            "Systems": {
+                "@odata.id": "/redfish/v1/Systems"
+            }
+        }
+    }
+]

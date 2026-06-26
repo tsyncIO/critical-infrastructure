@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+{% block title %}Alarm Events – KRITIS Lab{% endblock %}
+
+{% block content %}
+<div class="page-header fade-in">
+  <h1>🚨 Alarm Events</h1>
+  <p>Generated from real Tennessee Eastman Process sensor deviations against fault-free baseline thresholds.</p>
+</div>
+
+<!-- Filters -->
+<form id="alarm-filter-form" class="filter-bar fade-in">
+  <div class="filter-group">
+    <label class="filter-label" for="filter-role">Dataset Role</label>
+    <select id="filter-role" name="role" class="kselect">
+      <option value="">All roles</option>
+      <option value="faulty_testing" selected>Faulty Testing</option>
+      <option value="faulty_training">Faulty Training</option>
+      <option value="fault_free_testing">Fault-Free Testing</option>
+      <option value="fault_free_training">Fault-Free Training</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label class="filter-label" for="filter-severity">Severity</label>
+    <select id="filter-severity" name="severity" class="kselect">
+      <option value="">All</option>
+      <option value="critical">Critical</option>
+      <option value="warning">Warning</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label class="filter-label" for="filter-component">Component</label>
+    <select id="filter-component" name="component_key" class="kselect">
+      <option value="">All components</option>
+      <option value="cooling_system">Cooling System</option>
+      <option value="industrial_process">Industrial Process</option>
+      <option value="process_control_system">Process Control System</option>
+      <option value="port_operations">Port Operations</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label class="filter-label" for="filter-duplicate">Duplicates</label>
+    <select id="filter-duplicate" name="show_dup" class="kselect">
+      <option value="all">All alarms</option>
+      <option value="unique">Unique only</option>
+    </select>
+  </div>
+  <button type="button" id="btn-load-alarms" class="kbtn kbtn-primary align-self-end">🔍 Apply</button>
+</form>
+
+<!-- Chart -->
+<div class="kcard mb-4 fade-in">
+  <div class="kcard-header">
+    <div class="kcard-icon" style="background:rgba(59,130,246,.15);">📈</div>
+    <h5>Deviation Time Series</h5>
+    <span class="text-muted ms-auto" style="font-size:.8rem;">Showing filtered alarm deviations from threshold</span>
+  </div>
+  <div id="alarm-time-series" style="height:340px;"></div>
+</div>
+
+<!-- Alarm Table (dynamic) -->
+<div class="kcard fade-in">
+  <div class="kcard-header">
+    <div class="kcard-icon" style="background:rgba(239,68,68,.15);">🚨</div>
+    <h5>Alarm Records</h5>
+    <span id="alarm-count" class="text-muted ms-auto" style="font-size:.8rem;"></span>
+  </div>
+  <div class="table-responsive">
+    <table class="ktable" id="alarm-table">
+      <thead>
+        <tr>
+          <th>Time Step</th>
+          <th>Component</th>
+          <th>Variable</th>
+          <th>Type</th>
+          <th>Severity</th>
+          <th>Duplicate</th>
+          <th>Deviation</th>
+          <th>Message</th>
+        </tr>
+      </thead>
+      <tbody id="alarm-tbody">
+        <tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">Loading alarms…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.30.0/dist/plotly.min.js"></script>
+<script>
+const PLOTLY_DARK = {
+  paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+  font: { color: '#94a3b8', family: 'Inter, sans-serif', size: 11 },
+  margin: { t: 20, b: 50, l: 60, r: 20 },
+  legend: { bgcolor: 'transparent' },
+};
+
+const COMP_COLORS = {
+  cooling_system: '#06b6d4',
+  industrial_process: '#3b82f6',
+  process_control_system: '#8b5cf6',
+  port_operations: '#10b981',
+};
+
+function loadAlarms() {
+  const params = new URLSearchParams();
+  const role = document.getElementById('filter-role').value;
+  const severity = document.getElementById('filter-severity').value;
+  const component = document.getElementById('filter-component').value;
+  const showDup = document.getElementById('filter-duplicate').value;
+  if (role) params.set('role', role);
+  if (severity) params.set('severity', severity);
+  if (component) params.set('component_key', component);
+  params.set('limit', '500');
+
+  document.getElementById('alarm-tbody').innerHTML =
+    '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">Loading…</td></tr>';
+
+  fetch('/api/alarms?' + params.toString())
+    .then(r => r.json())
+    .then(alarms => {
+      let filtered = alarms;
+      if (showDup === 'unique') filtered = alarms.filter(a => !a.duplicate);
+      renderTable(filtered);
+      renderChart(filtered);
+      document.getElementById('alarm-count').textContent =
+        `${filtered.length} alarms shown (${alarms.filter(a => a.duplicate).length} duplicates filtered)`;
+    });
+}
+
+function renderTable(alarms) {
+  const tbody = document.getElementById('alarm-tbody');
+  if (!alarms.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">No alarms match the current filters.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = alarms.slice(0, 200).map(a => `
+    <tr>
+      <td class="mono">${a.time_step}</td>
+      <td><span style="color:${COMP_COLORS[a.component_key] || '#94a3b8'};font-size:.8125rem;">${a.component_key || '—'}</span></td>
+      <td class="mono" style="font-size:.75rem;color:var(--text-muted);">${(a.alarm_type || '').replace(/_alarm/, '')}</td>
+      <td style="font-size:.8125rem;">${a.alarm_type || ''}</td>
+      <td><span class="badge-severity badge-${a.severity}">${a.severity}</span></td>
+      <td style="text-align:center;">${a.duplicate ? '<span class="badge bg-secondary">dup</span>' : '<span class="badge bg-success">✓</span>'}</td>
+      <td class="mono" style="font-size:.8125rem;">${a.deviation_value !== null ? (+a.deviation_value).toFixed(3) : '—'}</td>
+      <td style="font-size:.75rem;color:var(--text-secondary);max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${a.message}">${a.message}</td>
+    </tr>
+  `).join('');
+}
+
+function renderChart(alarms) {
+  const grouped = {};
+  alarms.slice(0, 500).forEach(a => {
+    const key = a.component_key || 'unknown';
+    if (!grouped[key]) grouped[key] = { x: [], y: [] };
+    grouped[key].x.push(a.time_step);
+    grouped[key].y.push(Math.abs(a.deviation_value || 0));
+  });
+  const traces = Object.entries(grouped).map(([comp, d]) => ({
+    x: d.x, y: d.y,
+    mode: 'markers',
+    type: 'scattergl',
+    name: comp.replace(/_/g, ' '),
+    marker: { color: COMP_COLORS[comp] || '#64748b', size: 4, opacity: 0.7 },
+  }));
+  Plotly.newPlot('alarm-time-series', traces, {
+    ...PLOTLY_DARK,
+    xaxis: { title: 'Time Step', gridcolor: '#253148' },
+    yaxis: { title: 'Deviation from Threshold', gridcolor: '#253148' },
+  }, { responsive: true, displayModeBar: false });
+}
+
+document.getElementById('btn-load-alarms').addEventListener('click', loadAlarms);
+loadAlarms();
+</script>
+{% endblock %}

@@ -1,0 +1,191 @@
+{% extends 'base.html' %}
+{% block title %}Simulation – KRITIS Lab{% endblock %}
+
+{% block content %}
+<div class="page-header fade-in">
+  <h1>⚙️ Cascading Simulation</h1>
+  <p>Run cascading impact simulations for incidents and evaluate Business Continuity Management (BCM) outcomes.</p>
+</div>
+
+<!-- Simulation Runner -->
+<div class="row g-4 fade-in mb-4">
+  <div class="col-md-5">
+    <div class="kcard">
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(139,92,246,.15);">🚀</div>
+        <h5>Run New Simulation</h5>
+      </div>
+      <div class="mb-3">
+        <label class="filter-label mb-1" for="sim-incident-select">Select Incident</label>
+        <select id="sim-incident-select" class="kselect w-100">
+          <option value="">Loading incidents…</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="filter-label mb-1" for="sim-scenario-name">Scenario Name (optional)</label>
+        <input id="sim-scenario-name" type="text" class="kinput w-100" placeholder="e.g. worst-case" value="default" />
+      </div>
+      <button id="btn-run-sim" class="kbtn kbtn-primary" style="width:100%;justify-content:center;">
+        ⚙️ Run Simulation
+      </button>
+      <div id="sim-runner-result" class="mt-3"></div>
+    </div>
+  </div>
+
+  <div class="col-md-7">
+    <div class="kcard">
+      <div class="kcard-header">
+        <div class="kcard-icon" style="background:rgba(16,185,129,.15);">📊</div>
+        <h5>BCM Reference</h5>
+      </div>
+      <table class="ktable">
+        <thead><tr><th>Component</th><th>MTD (min)</th><th>RTO (min)</th><th>Backup</th></tr></thead>
+        <tbody id="bcm-table-body">
+          <tr><td colspan="4" style="text-align:center;color:var(--text-muted);">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Past Simulation Runs -->
+<div class="kcard fade-in">
+  <div class="kcard-header">
+    <div class="kcard-icon" style="background:rgba(245,158,11,.15);">🕐</div>
+    <h5>Past Simulation Runs</h5>
+    <button class="kbtn kbtn-secondary ms-auto" onclick="loadSimulations()">↻ Refresh</button>
+  </div>
+  <div id="simulations-list">
+    {% if simulations %}
+      {% for sim in simulations %}
+      <div class="incident-card {% if sim.continuity_risk == 'high' %}critical{% elif sim.continuity_risk == 'medium' %}warning{% endif %}" style="cursor:pointer;" onclick="loadSimDetail({{ sim.id }})">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <strong>Simulation #{{ sim.id }}</strong> – Incident #{{ sim.incident_id }}
+            <div class="text-muted" style="font-size:.75rem;">{{ sim.started_at.strftime('%Y-%m-%d %H:%M') }} &middot; {{ sim.scenario_name }}</div>
+          </div>
+          <div class="d-flex gap-2 align-items-center">
+            <span class="risk-indicator risk-{{ sim.continuity_risk }}">{{ sim.continuity_risk }} risk</span>
+            <span class="meta-chip">{{ sim.estimated_interruption_min }} min</span>
+          </div>
+        </div>
+        <div id="sim-detail-{{ sim.id }}" style="display:none;margin-top:1rem;"></div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="kalert kalert-info">No simulations run yet. Select an incident above and click Run Simulation.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Load incidents for selector
+fetch('/api/incidents?limit=100')
+  .then(r => r.json())
+  .then(incidents => {
+    const sel = document.getElementById('sim-incident-select');
+    if (!incidents.length) {
+      sel.innerHTML = '<option value="">No incidents available</option>';
+      return;
+    }
+    sel.innerHTML = incidents.map(inc =>
+      `<option value="${inc.id}">[#${inc.id}] ${inc.title} (${inc.severity})</option>`
+    ).join('');
+  });
+
+// Load BCM profiles
+fetch('/api/components')
+  .then(r => r.json())
+  .then(components => {
+    // We'll just show component names; full BCM data from simulations
+    const tbody = document.getElementById('bcm-table-body');
+    const BCM_MAP = {
+      emergency_power:          { mtd: 15,  rto: 5,  backup: true },
+      process_control_system:   { mtd: 45,  rto: 20, backup: true },
+      cooling_system:           { mtd: 60,  rto: 30, backup: true },
+      industrial_process:       { mtd: 90,  rto: 45, backup: false },
+      port_operations:          { mtd: 120, rto: 60, backup: true },
+      communication_system:     { mtd: 30,  rto: 15, backup: true },
+      water_supply:             { mtd: 180, rto: 90, backup: true },
+      municipal_crisis_coordination: { mtd: 30, rto: 15, backup: true },
+    };
+    tbody.innerHTML = components.map(c => {
+      const b = BCM_MAP[c.key] || {};
+      return `<tr>
+        <td style="color:var(--accent-cyan);">${c.display_name}</td>
+        <td class="mono">${b.mtd || '—'}</td>
+        <td class="mono">${b.rto || '—'}</td>
+        <td>${b.backup ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'}</td>
+      </tr>`;
+    }).join('');
+  });
+
+document.getElementById('btn-run-sim').addEventListener('click', () => {
+  const incidentId = document.getElementById('sim-incident-select').value;
+  const scenarioName = document.getElementById('sim-scenario-name').value || 'default';
+  const resultDiv = document.getElementById('sim-runner-result');
+  if (!incidentId) {
+    resultDiv.innerHTML = '<div class="kalert kalert-warning">Please select an incident first.</div>';
+    return;
+  }
+  const btn = document.getElementById('btn-run-sim');
+  btn.disabled = true;
+  btn.textContent = '⏳ Simulating…';
+  resultDiv.innerHTML = '';
+
+  fetch(`/api/incidents/${incidentId}/simulate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scenario_name: scenarioName }),
+  })
+    .then(r => r.json())
+    .then(data => {
+      const riskClass = { high: 'risk-high', medium: 'risk-medium', low: 'risk-low' }[data.continuity_risk] || '';
+      resultDiv.innerHTML = `
+        <div class="kalert kalert-success">
+          <strong>Simulation #${data.simulation_id} complete!</strong>
+          <div>Continuity Risk: <span class="risk-indicator ${riskClass}">${data.continuity_risk?.toUpperCase()}</span></div>
+          <div>Estimated interruption: <strong>${data.estimated_interruption_min} min</strong></div>
+          <div style="margin-top:.5rem;font-size:.85rem;">${data.recommendation}</div>
+        </div>`;
+      loadSimulations();
+      btn.disabled = false;
+      btn.textContent = '⚙️ Run Simulation';
+    })
+    .catch(err => {
+      resultDiv.innerHTML = `<div class="kalert kalert-danger">${err.message}</div>`;
+      btn.disabled = false;
+      btn.textContent = '⚙️ Run Simulation';
+    });
+});
+
+function loadSimDetail(simId) {
+  const el = document.getElementById('sim-detail-' + simId);
+  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+  el.innerHTML = '<span class="text-muted">Loading…</span>';
+  el.style.display = 'block';
+  fetch(`/api/simulations/${simId}`)
+    .then(r => r.json())
+    .then(data => {
+      const rows = (data.impacts || []).map(ev =>
+        `<tr>
+          <td class="mono">+${ev.minute_offset} min</td>
+          <td style="color:var(--accent-cyan);">${ev.component_key.replace(/_/g,' ')}</td>
+          <td><span class="badge-severity badge-${ ev.impact_level === 'severe' ? 'critical' : 'warning'}">${ev.impact_level}</span></td>
+          <td style="font-size:.8rem;">${ev.message}</td>
+        </tr>`
+      ).join('');
+      el.innerHTML = `
+        <div class="table-responsive">
+          <table class="ktable"><thead><tr><th>Time Offset</th><th>Component</th><th>Impact Level</th><th>Message</th></tr></thead>
+          <tbody>${rows}</tbody></table>
+        </div>
+        <div class="kalert kalert-info mt-2" style="font-size:.85rem;"><strong>Recommendation:</strong> ${data.recommendation}</div>`;
+    });
+}
+
+function loadSimulations() { location.reload(); }
+</script>
+{% endblock %}

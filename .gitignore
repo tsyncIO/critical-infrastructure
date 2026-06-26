@@ -1,0 +1,59 @@
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs and reports (generated at runtime, keep in repo but ignore cache)
+controller/logs/*.log
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+Data/
+
+# Flask instance folder (contains local DB)
+instance/
+
+# Pytest cache
+.pytest_cache/
+
+# Local generated files
+skill.md
+project_layout.txt

@@ -1,0 +1,58 @@
+[
+  {
+    "component_key": "emergency_power",
+    "display_name": "Emergency Power",
+    "sector": "Energy",
+    "responsible_org": "Infrastructure operator",
+    "description": "Backup power capability used to maintain control and monitoring functions during disruption."
+  },
+  {
+    "component_key": "process_control_system",
+    "display_name": "Process Control System",
+    "sector": "Industrial control",
+    "responsible_org": "Industrial operator",
+    "description": "Control and monitoring layer for industrial process variables and manipulated variables."
+  },
+  {
+    "component_key": "cooling_system",
+    "display_name": "Cooling System",
+    "sector": "Technical infrastructure",
+    "responsible_org": "Industrial operator",
+    "description": "Cooling-related technical subsystem whose degradation can affect process stability."
+  },
+  {
+    "component_key": "industrial_process",
+    "display_name": "Industrial Process",
+    "sector": "Production / service process",
+    "responsible_org": "Industrial operator",
+    "description": "Core process represented by the Tennessee Eastman benchmark variables."
+  },
+  {
+    "component_key": "port_operations",
+    "display_name": "Port Operations",
+    "sector": "Maritime critical infrastructure",
+    "responsible_org": "Port operator",
+    "description": "Synthetic service layer representing operational availability of maritime infrastructure."
+  },
+  {
+    "component_key": "communication_system",
+    "display_name": "Communication System",
+    "sector": "Information and communication",
+    "responsible_org": "IT / communications provider",
+    "description": "Communication layer needed for coordination between operators and authorities."
+  },
+  {
+    "component_key": "water_supply",
+    "display_name": "Water Supply",
+    "sector": "Municipal infrastructure",
+    "responsible_org": "Municipal utility",
+    "description": "Synthetic municipal dependency used for crisis-readiness demonstration."
+  },
+  {
+    "component_key": "municipal_crisis_coordination",
+    "display_name": "Municipal Crisis Coordination",
+    "sector": "Civil protection",
+    "responsible_org": "Municipal crisis team",
+    "description": "Coordination function for crisis response and continuity decisions."
+  }
+]

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_1"
+                  targetNamespace="http://example.com/kritis">
+  <bpmn:process id="CrisisResponseProcess" isExecutable="true">
+    <bpmn:laneSet id="LaneSet_1">
+      <bpmn:lane id="Lane_Monitoring" name="Monitoring System" />
+      <bpmn:lane id="Lane_Infrastructure" name="Infrastructure Operator" />
+      <bpmn:lane id="Lane_Municipal" name="Municipal Crisis Team" />
+      <bpmn:lane id="Lane_External" name="External Support / Authority" />
+    </bpmn:laneSet>
+    <bpmn:startEvent id="StartEvent_AlarmReceived" name="Alarm received" />
+    <bpmn:task id="Task_ValidateAlarm" name="Automated validation" />
+    <bpmn:exclusiveGateway id="Gateway_Duplicate" name="Duplicate alarm?" />
+    <bpmn:task id="Task_GroupIncident" name="Group with existing incident" />
+    <bpmn:task id="Task_CreateIncident" name="Create new incident" />
+    <bpmn:task id="Task_AssessDependency" name="Assess dependency impact" />
+    <bpmn:exclusiveGateway id="Gateway_CriticalRisk" name="Critical continuity risk?" />
+    <bpmn:task id="Task_NotifyCrisisTeam" name="Notify municipal crisis team" />
+    <bpmn:task id="Task_ActivateContinuity" name="Activate continuity measure" />
+    <bpmn:task id="Task_RequestSupport" name="Request external support" />
+    <bpmn:task id="Task_Monitor" name="Monitor and document" />
+    <bpmn:task id="Task_UpdateReport" name="Update situation report" />
+    <bpmn:endEvent id="EndEvent_CloseIncident" name="Close incident" />
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_AlarmReceived" targetRef="Task_ValidateAlarm" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_ValidateAlarm" targetRef="Gateway_Duplicate" />
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Gateway_Duplicate" targetRef="Task_GroupIncident" />
+    <bpmn:sequenceFlow id="Flow_4" sourceRef="Gateway_Duplicate" targetRef="Task_CreateIncident" />
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="Task_CreateIncident" targetRef="Task_AssessDependency" />
+    <bpmn:sequenceFlow id="Flow_6" sourceRef="Task_AssessDependency" targetRef="Gateway_CriticalRisk" />
+    <bpmn:sequenceFlow id="Flow_7" sourceRef="Gateway_CriticalRisk" targetRef="Task_NotifyCrisisTeam" />
+    <bpmn:sequenceFlow id="Flow_8" sourceRef="Task_NotifyCrisisTeam" targetRef="Task_ActivateContinuity" />
+    <bpmn:sequenceFlow id="Flow_9" sourceRef="Task_ActivateContinuity" targetRef="Task_RequestSupport" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Gateway_CriticalRisk" targetRef="Task_Monitor" />
+    <bpmn:sequenceFlow id="Flow_11" sourceRef="Task_RequestSupport" targetRef="Task_UpdateReport" />
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="Task_Monitor" targetRef="Task_UpdateReport" />
+    <bpmn:sequenceFlow id="Flow_13" sourceRef="Task_UpdateReport" targetRef="EndEvent_CloseIncident" />
+  </bpmn:process>
+</bpmn:definitions>
