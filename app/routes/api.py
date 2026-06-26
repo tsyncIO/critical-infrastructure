@@ -72,9 +72,16 @@ def variables():
 def alarms():
     query = AlarmEvent.query
     role = request.args.get('role')
+    severity = request.args.get('severity')
+    component_key = request.args.get('component_key')
+    limit = int(request.args.get('limit', 500))
     if role:
-        query = query.join(TepRun).filter(TepRun.dataset_role == role)
-    alarms = query.order_by(AlarmEvent.created_at.desc()).limit(200).all()
+        query = query.join(TepRun, AlarmEvent.run_id == TepRun.id).filter(TepRun.dataset_role == role)
+    if severity:
+        query = query.filter(AlarmEvent.severity == severity)
+    if component_key:
+        query = query.filter(AlarmEvent.component_key == component_key)
+    alarms = query.order_by(AlarmEvent.time_step.asc()).limit(limit).all()
     return jsonify([{
         'id': a.id,
         'run_id': a.run_id,
@@ -332,3 +339,181 @@ def bpmn_xml():
         return Response(xml, mimetype='application/xml')
     except FileNotFoundError:
         return jsonify({'error': 'BPMN file not found'}), 404
+
+
+# ---------------------------------------------------------------------------
+# Interactive Pipeline Action Endpoints (called by dashboard buttons)
+# ---------------------------------------------------------------------------
+
+@api_bp.route('/pipeline/load-data')
+def pipeline_load_data():
+    """
+    Return all data-loading sub-stage info as a single JSON response.
+    The frontend JS drives the animated progress bar using timed steps.
+    """
+    from app.models import (
+        RawDatasetFile, TepRun, SensorVariable,
+        SensorObservation, VariableStatistic,
+    )
+    files     = RawDatasetFile.query.all()
+    runs      = TepRun.query.count()
+    variables = SensorVariable.query.count()
+    obs       = SensorObservation.query.count()
+    thresholds = VariableStatistic.query.count()
+
+    stages = [
+        {
+            "pct":    10,
+            "stage":  "Scanning RData files…",
+            "detail": f"{len(files)} file(s): " + ", ".join(f.file_name for f in files),
+        },
+        {
+            "pct":    30,
+            "stage":  "Loading TEP simulation runs…",
+            "detail": f"{runs:,} simulation runs found",
+        },
+        {
+            "pct":    55,
+            "stage":  "Registering sensor variables…",
+            "detail": f"{variables} sensor variables mapped",
+        },
+        {
+            "pct":    80,
+            "stage":  "Counting observations…",
+            "detail": f"{obs:,} sensor observations in database",
+        },
+        {
+            "pct":    95,
+            "stage":  "Loading threshold statistics…",
+            "detail": f"{thresholds} baseline thresholds derived",
+        },
+        {
+            "pct":    100,
+            "stage":  "Data pipeline ready ✅",
+            "detail": f"{len(files)} files · {runs:,} runs · {variables} variables · {obs:,} observations",
+            "done":   True,
+            "totals": {
+                "files":        len(files),
+                "runs":         runs,
+                "variables":    variables,
+                "observations": obs,
+            },
+        },
+    ]
+    return jsonify({"status": "ok", "stages": stages})
+
+
+
+
+@api_bp.route('/pipeline/status')
+def pipeline_status():
+    """Return live counts of every pipeline stage for the dashboard."""
+    from app.models import SensorObservation, VariableStatistic
+    critical = AlarmEvent.query.filter_by(severity='critical').count()
+    warning  = AlarmEvent.query.filter_by(severity='warning').count()
+    critical_inc = Incident.query.filter_by(severity='critical').count()
+    warning_inc  = Incident.query.filter_by(severity='warning').count()
+    latest_r = ReadinessAssessment.query.order_by(
+        ReadinessAssessment.created_at.desc()
+    ).first()
+    return jsonify({
+        'runs':         TepRun.query.count(),
+        'variables':    SensorVariable.query.count(),
+        'observations': SensorObservation.query.count(),
+        'alarms':       AlarmEvent.query.count(),
+        'critical':     critical,
+        'warning':      warning,
+        'incidents':    Incident.query.count(),
+        'critical_incidents': critical_inc,
+        'warning_incidents':  warning_inc,
+        'simulations':  SimulationRun.query.count(),
+        'readiness_pct': round(latest_r.percentage_score, 1) if latest_r else None,
+        'readiness_title': latest_r.title if latest_r else None,
+        'thresholds_set': bool(
+            __import__('app.models', fromlist=['VariableStatistic'])
+            .VariableStatistic.query.count()
+        ),
+    })
+
+
+@api_bp.route('/pipeline/generate-alarms', methods=['POST'])
+def pipeline_generate_alarms():
+    """Trigger alarm generation for all faulty runs and return counts."""
+    from app.services.alarm_generator import generate_alarms_for_run
+    before = AlarmEvent.query.count()
+    new_count = generate_alarms_for_run(dataset_role='faulty_training')
+    after = AlarmEvent.query.count()
+    critical = AlarmEvent.query.filter_by(severity='critical').count()
+    warning  = AlarmEvent.query.filter_by(severity='warning').count()
+    return jsonify({
+        'status':    'ok',
+        'new_alarms': new_count,
+        'total_alarms': after,
+        'critical': critical,
+        'warning':  warning,
+        'already_existed': before > 0,
+    })
+
+
+@api_bp.route('/pipeline/group-incidents', methods=['POST'])
+def pipeline_group_incidents():
+    """Trigger incident grouping and return counts."""
+    from app.services.incident_grouper import group_incidents
+    before = Incident.query.count()
+    new_count = group_incidents()
+    after = Incident.query.count()
+    critical_inc = Incident.query.filter_by(severity='critical').count()
+    warning_inc  = Incident.query.filter_by(severity='warning').count()
+    return jsonify({
+        'status':         'ok',
+        'new_incidents':  new_count,
+        'total_incidents': after,
+        'critical':       critical_inc,
+        'warning':        warning_inc,
+        'already_existed': before > 0,
+    })
+
+
+@api_bp.route('/pipeline/run-readiness', methods=['POST'])
+def pipeline_run_readiness():
+    """Auto-run a readiness assessment based on current incident state and return score."""
+    from app.services.readiness_score import score_assessment
+    questions = ReadinessQuestion.query.all()
+    if not questions:
+        return jsonify({'error': 'No readiness questions configured.'}), 400
+
+    # Auto-answer based on current system state
+    critical_count = Incident.query.filter_by(severity='critical').count()
+    sim_count = SimulationRun.query.count()
+
+    answers = []
+    for q in questions:
+        key = q.question_key.lower()
+        # Heuristic auto-answers for demo
+        if 'backup' in key or 'redundan' in key:
+            val = 'partial'
+        elif 'monitor' in key or 'detect' in key:
+            val = 'yes' if AlarmEvent.query.count() > 0 else 'no'
+        elif 'simulat' in key or 'test' in key:
+            val = 'yes' if sim_count > 0 else 'partial'
+        elif 'plan' in key or 'protocol' in key or 'procedure' in key:
+            val = 'partial'
+        elif 'critical' in key:
+            val = 'no' if critical_count > 1000 else 'partial'
+        else:
+            val = 'partial'
+        answers.append({
+            'question_key': q.question_key,
+            'answer_value': val,
+            'comment': 'Auto-assessed by KRITIS Lab demo pipeline.',
+        })
+
+    assessment = score_assessment(answers, title='Live Demo Assessment')
+    return jsonify({
+        'status':           'ok',
+        'assessment_id':    assessment.id,
+        'title':            assessment.title,
+        'total_score':      assessment.total_score,
+        'max_score':        assessment.max_score,
+        'percentage_score': round(assessment.percentage_score, 1),
+    })

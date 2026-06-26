@@ -13,10 +13,10 @@
     <label class="filter-label" for="filter-role">Dataset Role</label>
     <select id="filter-role" name="role" class="kselect">
       <option value="">All roles</option>
-      <option value="faulty_testing" selected>Faulty Testing</option>
-      <option value="faulty_training">Faulty Training</option>
-      <option value="fault_free_testing">Fault-Free Testing</option>
+      <option value="faulty_training" selected>Faulty Training ✓</option>
       <option value="fault_free_training">Fault-Free Training</option>
+      <option value="faulty_testing">Faulty Testing</option>
+      <option value="fault_free_testing">Fault-Free Testing</option>
     </select>
   </div>
   <div class="filter-group">
@@ -54,7 +54,13 @@
     <h5>Deviation Time Series</h5>
     <span class="text-muted ms-auto" style="font-size:.8rem;">Showing filtered alarm deviations from threshold</span>
   </div>
-  <div id="alarm-time-series" style="height:340px;"></div>
+  <div id="alarm-time-series" style="height:340px;position:relative;">
+    <div id="chart-nodata" style="display:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:.5rem;color:#475569;">
+      <span style="font-size:2rem;">📭</span>
+      <span style="font-size:.875rem;">No alarm data for this filter combination.</span>
+      <span style="font-size:.75rem;">Try selecting <strong style="color:#60a5fa;">Faulty Training</strong> as the Dataset Role.</span>
+    </div>
+  </div>
 </div>
 
 <!-- Alarm Table (dynamic) -->
@@ -87,9 +93,9 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.30.0/dist/plotly.min.js"></script>
+<script src="/static/js/plotly.min.js"></script>
 <script>
-const PLOTLY_DARK = {
+const DARK = {
   paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
   font: { color: '#94a3b8', family: 'Inter, sans-serif', size: 11 },
   margin: { t: 20, b: 50, l: 60, r: 20 },
@@ -97,81 +103,120 @@ const PLOTLY_DARK = {
 };
 
 const COMP_COLORS = {
-  cooling_system: '#06b6d4',
-  industrial_process: '#3b82f6',
-  process_control_system: '#8b5cf6',
-  port_operations: '#10b981',
+  cooling_system:        '#06b6d4',
+  industrial_process:    '#3b82f6',
+  process_control_system:'#8b5cf6',
+  port_operations:       '#10b981',
+  communication_system:  '#f59e0b',
 };
 
-function loadAlarms() {
-  const params = new URLSearchParams();
-  const role = document.getElementById('filter-role').value;
-  const severity = document.getElementById('filter-severity').value;
+function setLoading(on) {
+  const tbody = document.getElementById('alarm-tbody');
+  if (on) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#60a5fa;">⏳ Loading alarms…</td></tr>';
+    document.getElementById('alarm-count').textContent = '';
+  }
+}
+
+async function loadAlarms() {
+  setLoading(true);
+  const role      = document.getElementById('filter-role').value;
+  const severity  = document.getElementById('filter-severity').value;
   const component = document.getElementById('filter-component').value;
-  const showDup = document.getElementById('filter-duplicate').value;
-  if (role) params.set('role', role);
-  if (severity) params.set('severity', severity);
+  const showDup   = document.getElementById('filter-duplicate').value;
+
+  const params = new URLSearchParams();
+  if (role)      params.set('role', role);
+  if (severity)  params.set('severity', severity);
   if (component) params.set('component_key', component);
-  params.set('limit', '500');
+  params.set('limit', '1000');
 
-  document.getElementById('alarm-tbody').innerHTML =
-    '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">Loading…</td></tr>';
+  try {
+    const resp = await fetch('/api/alarms?' + params.toString());
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    let alarms = await resp.json();
 
-  fetch('/api/alarms?' + params.toString())
-    .then(r => r.json())
-    .then(alarms => {
-      let filtered = alarms;
-      if (showDup === 'unique') filtered = alarms.filter(a => !a.duplicate);
-      renderTable(filtered);
-      renderChart(filtered);
-      document.getElementById('alarm-count').textContent =
-        `${filtered.length} alarms shown (${alarms.filter(a => a.duplicate).length} duplicates filtered)`;
-    });
+    // Client-side duplicate filter
+    if (showDup === 'unique') alarms = alarms.filter(a => !a.duplicate);
+
+    // Count badge
+    const dups = alarms.filter(a => a.duplicate).length;
+    document.getElementById('alarm-count').textContent =
+      `${alarms.length.toLocaleString()} alarms shown` +
+      (dups > 0 ? ` · ${dups} duplicates` : '');
+
+    renderTable(alarms);
+    renderChart(alarms);
+  } catch (e) {
+    document.getElementById('alarm-tbody').innerHTML =
+      `<tr><td colspan="8" style="text-align:center;padding:2rem;color:#ef4444;">❌ Error: ${e.message}</td></tr>`;
+    console.error('loadAlarms failed:', e);
+  }
 }
 
 function renderTable(alarms) {
   const tbody = document.getElementById('alarm-tbody');
   if (!alarms.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">No alarms match the current filters.</td></tr>';
+    tbody.innerHTML = `
+      <tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">
+        No alarms match the current filters.<br>
+        <span style="font-size:.78rem;color:#475569;">
+          💡 Tip: Fault-Free Training data has no alarms by design — switch to <strong>Faulty Training</strong>.
+        </span>
+      </td></tr>`;
     return;
   }
-  tbody.innerHTML = alarms.slice(0, 200).map(a => `
+  tbody.innerHTML = alarms.slice(0, 300).map(a => `
     <tr>
       <td class="mono">${a.time_step}</td>
-      <td><span style="color:${COMP_COLORS[a.component_key] || '#94a3b8'};font-size:.8125rem;">${a.component_key || '—'}</span></td>
-      <td class="mono" style="font-size:.75rem;color:var(--text-muted);">${(a.alarm_type || '').replace(/_alarm/, '')}</td>
-      <td style="font-size:.8125rem;">${a.alarm_type || ''}</td>
+      <td><span style="color:${COMP_COLORS[a.component_key]||'#94a3b8'};font-size:.8125rem;">${(a.component_key||'—').replace(/_/g,' ')}</span></td>
+      <td class="mono" style="font-size:.75rem;color:var(--text-muted);">${(a.alarm_type||'').replace(/_alarm$/,'').replace(/_/g,' ')}</td>
+      <td style="font-size:.8125rem;">${(a.alarm_type||'').replace(/_/g,' ')}</td>
       <td><span class="badge-severity badge-${a.severity}">${a.severity}</span></td>
-      <td style="text-align:center;">${a.duplicate ? '<span class="badge bg-secondary">dup</span>' : '<span class="badge bg-success">✓</span>'}</td>
-      <td class="mono" style="font-size:.8125rem;">${a.deviation_value !== null ? (+a.deviation_value).toFixed(3) : '—'}</td>
-      <td style="font-size:.75rem;color:var(--text-secondary);max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${a.message}">${a.message}</td>
+      <td style="text-align:center;">${a.duplicate?'<span class="badge bg-secondary" style="font-size:.7rem;">dup</span>':'<span style="color:#10b981;font-size:.85rem;">✓</span>'}</td>
+      <td class="mono" style="font-size:.8125rem;">${a.deviation_value!=null?(+a.deviation_value).toFixed(3):'—'}</td>
+      <td style="font-size:.75rem;color:var(--text-secondary);max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${a.message}">${a.message}</td>
     </tr>
   `).join('');
 }
 
 function renderChart(alarms) {
-  const grouped = {};
-  alarms.slice(0, 500).forEach(a => {
-    const key = a.component_key || 'unknown';
-    if (!grouped[key]) grouped[key] = { x: [], y: [] };
-    grouped[key].x.push(a.time_step);
-    grouped[key].y.push(Math.abs(a.deviation_value || 0));
+  const nodata = document.getElementById('chart-nodata');
+  if (!alarms.length) {
+    Plotly.purge('alarm-time-series');
+    if (nodata) nodata.style.display = 'flex';
+    return;
+  }
+  if (nodata) nodata.style.display = 'none';
+  // Group by component
+  const groups = {};
+  alarms.forEach(a => {
+    const k = a.component_key || 'unknown';
+    if (!groups[k]) groups[k] = { x: [], y: [], text: [] };
+    groups[k].x.push(a.time_step);
+    groups[k].y.push(Math.abs(a.deviation_value || 0));
+    groups[k].text.push(`t=${a.time_step} | ${a.severity} | dev=${(+a.deviation_value||0).toFixed(2)}`);
   });
-  const traces = Object.entries(grouped).map(([comp, d]) => ({
-    x: d.x, y: d.y,
+
+  const traces = Object.entries(groups).map(([comp, d]) => ({
+    x: d.x, y: d.y, text: d.text,
     mode: 'markers',
-    type: 'scattergl',
+    type: 'scatter',           // ← NOT scattergl, avoids WebGL issues
     name: comp.replace(/_/g, ' '),
-    marker: { color: COMP_COLORS[comp] || '#64748b', size: 4, opacity: 0.7 },
+    hoverinfo: 'text',
+    marker: { color: COMP_COLORS[comp] || '#64748b', size: 5, opacity: 0.75 },
   }));
-  Plotly.newPlot('alarm-time-series', traces, {
-    ...PLOTLY_DARK,
+
+  Plotly.react('alarm-time-series', traces, {
+    ...DARK,
     xaxis: { title: 'Time Step', gridcolor: '#253148' },
     yaxis: { title: 'Deviation from Threshold', gridcolor: '#253148' },
   }, { responsive: true, displayModeBar: false });
 }
 
 document.getElementById('btn-load-alarms').addEventListener('click', loadAlarms);
+// Auto-load on page open
 loadAlarms();
 </script>
 {% endblock %}
+

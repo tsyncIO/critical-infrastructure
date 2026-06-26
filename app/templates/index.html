@@ -2,206 +2,263 @@
 {% block title %}Dashboard – KRITIS Alarm & Dependency Lab{% endblock %}
 
 {% block extra_head %}
-<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.30.0/dist/plotly.min.js"></script>
+<script src="/static/js/plotly.min.js"></script>
+<style>
+/* ── Pipeline Grid ──────────────────────────────────────────── */
+.pipeline-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+@media (max-width: 900px) { .pipeline-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 540px) { .pipeline-grid { grid-template-columns: 1fr; } }
+
+.pipeline-step {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+  transition: border-color .25s, box-shadow .25s;
+  position: relative;
+}
+.pipeline-step:hover { border-color: #3b82f6; box-shadow: 0 0 0 1px #3b82f633; }
+.pipeline-step.done-step { border-color: #10b981; }
+.pipeline-step.active-step { border-color: #3b82f6; }
+
+.step-number {
+  font-size: .7rem; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.step-icon  { font-size: 1.6rem; line-height: 1; }
+.step-title { font-weight: 600; font-size: .95rem; color: var(--text-primary); }
+.step-desc  { font-size: .75rem; color: var(--text-secondary); line-height: 1.55; flex: 1; }
+
+/* Step status badge */
+.step-badge {
+  display: inline-block; font-size: .7rem; font-weight: 600;
+  padding: .2rem .55rem; border-radius: 9999px; width: fit-content;
+}
+.step-pending  { background: rgba(148,163,184,.12); color: #94a3b8; }
+.step-running  { background: rgba(59,130,246,.15);  color: #60a5fa; animation: pulse 1.2s infinite; }
+.step-done     { background: rgba(16,185,129,.15);  color: #34d399; }
+.step-skipped  { background: rgba(245,158,11,.12);  color: #fbbf24; }
+.step-error    { background: rgba(239,68,68,.15);   color: #f87171; }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
+
+/* Pipeline action buttons */
+.btn-pipeline {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .45rem 1rem; border-radius: 8px; font-size: .82rem;
+  font-weight: 600; border: none; cursor: pointer;
+  transition: opacity .2s, transform .1s;
+  width: 100%; justify-content: center;
+}
+.btn-pipeline:active { transform: scale(.97); }
+.btn-pipeline:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary   { background: #3b82f6; color: #fff; }
+.btn-secondary { background: #334155; color: #94a3b8; }
+.btn-success   { background: #10b981; color: #fff; }
+.btn-danger    { background: #ef4444; color: #fff; }
+
+/* Result banners */
+.result-banner {
+  padding: .65rem 1rem; border-radius: 8px;
+  background: rgba(30,42,58,.8); font-size: .8rem;
+  line-height: 1.6; color: #cbd5e1;
+}
+.result-banner strong { color: #e2e8f0; }
+
+/* ── Progress Bar ───────────────────────────────────────────── */
+.progress-box {
+  margin-top: .5rem;
+  background: rgba(15,23,42,.6);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: .8rem;
+}
+.progress-header {
+  display: flex; justify-content: space-between;
+  align-items: center; margin-bottom: .45rem;
+  font-size: .75rem; color: var(--text-secondary);
+}
+.progress-track {
+  height: 8px; background: #1e2a3a;
+  border-radius: 99px; overflow: hidden; margin-bottom: .55rem;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #06b6d4);
+  border-radius: 99px;
+  transition: width .5s cubic-bezier(.4,0,.2,1);
+  width: 0%;
+}
+.progress-fill.complete {
+  background: linear-gradient(90deg, #10b981, #06b6d4);
+}
+.progress-stage {
+  font-size: .75rem; color: #60a5fa;
+  font-weight: 500; margin-bottom: .4rem;
+  min-height: 1rem;
+}
+
+/* Scrollable log lines inside progress box */
+.stage-log {
+  max-height: 90px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: .2rem;
+}
+.log-line { font-size: .7rem; color: var(--text-secondary); line-height: 1.4; }
+.log-pct  { color: #3b82f6; font-weight: 700; margin-right: .2rem; }
+.log-stage{ color: #e2e8f0; }
+.log-detail{ color: #64748b; }
+
+/* ── Stat Cards ─────────────────────────────────────────────── */
+.stats-bar {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: .75rem; margin-bottom: 2rem;
+}
+@media (max-width: 900px) { .stats-bar { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 540px) { .stats-bar { grid-template-columns: repeat(2, 1fr); } }
+.stat-card { padding: .9rem 1rem; }
+</style>
 {% endblock %}
 
 {% block content %}
 <div class="page-header fade-in">
   <h1>KRITIS Alarm &amp; Dependency Lab</h1>
-  <p>A PostgreSQL-backed research prototype using Tennessee Eastman Process data for alarm analysis and critical-infrastructure crisis simulation.</p>
+  <p>Click through each pipeline step to dynamically generate and visualize critical-infrastructure statistics.</p>
 </div>
 
-<!-- Stat Cards -->
-<div class="row g-3 mb-4 fade-in">
-  <div class="col-6 col-md-4 col-lg-2">
-    <div class="stat-card">
-      <div class="stat-label">TEP Runs</div>
-      <div class="stat-value" id="stat-runs">{{ summary.total_runs }}</div>
-      <div class="stat-sub">ingested</div>
-    </div>
+<!-- ══ Live Stat Bar ══════════════════════════════════════════════════════ -->
+<div class="stats-bar fade-in">
+  <div class="stat-card">
+    <div class="stat-label">TEP Runs</div>
+    <div class="stat-value" id="stat-runs">{{ summary.total_runs }}</div>
+    <div class="stat-sub">ingested</div>
   </div>
-  <div class="col-6 col-md-4 col-lg-2">
-    <div class="stat-card">
-      <div class="stat-label">Alarms</div>
-      <div class="stat-value" id="stat-alarms">{{ summary.total_alarms }}</div>
-      <div class="stat-sub">generated</div>
-    </div>
+  <div class="stat-card">
+    <div class="stat-label">Alarms</div>
+    <div class="stat-value" id="stat-alarms">{{ summary.total_alarms }}</div>
+    <div class="stat-sub">generated</div>
   </div>
-  <div class="col-6 col-md-4 col-lg-2">
-    <div class="stat-card">
-      <div class="stat-label">Critical</div>
-      <div class="stat-value text-red" id="stat-critical">{{ summary.critical_alarms }}</div>
-      <div class="stat-sub">critical alarms</div>
-    </div>
+  <div class="stat-card">
+    <div class="stat-label">Critical</div>
+    <div class="stat-value text-red" id="stat-critical">{{ summary.critical_alarms }}</div>
+    <div class="stat-sub">critical alarms</div>
   </div>
-  <div class="col-6 col-md-4 col-lg-2">
-    <div class="stat-card">
-      <div class="stat-label">Incidents</div>
-      <div class="stat-value text-amber" id="stat-incidents">{{ summary.total_incidents }}</div>
-      <div class="stat-sub">open incidents</div>
-    </div>
+  <div class="stat-card">
+    <div class="stat-label">Incidents</div>
+    <div class="stat-value text-amber" id="stat-incidents">{{ summary.total_incidents }}</div>
+    <div class="stat-sub">open incidents</div>
   </div>
-  <div class="col-6 col-md-4 col-lg-2">
-    <div class="stat-card">
-      <div class="stat-label">Simulations</div>
-      <div class="stat-value text-cyan" id="stat-sims">{{ summary.total_simulations }}</div>
-      <div class="stat-sub">runs completed</div>
-    </div>
+  <div class="stat-card">
+    <div class="stat-label">Simulations</div>
+    <div class="stat-value text-cyan" id="stat-sims">{{ summary.total_simulations }}</div>
+    <div class="stat-sub">runs completed</div>
   </div>
-  <div class="col-6 col-md-4 col-lg-2">
-    <div class="stat-card">
-      <div class="stat-label">Readiness</div>
-      <div class="stat-value text-green" id="stat-readiness">
-        {% if summary.latest_readiness %}{{ summary.latest_readiness.percentage_score | round(0) | int }}%{% else %}—{% endif %}
-      </div>
-      <div class="stat-sub">latest score</div>
+  <div class="stat-card">
+    <div class="stat-label">Readiness</div>
+    <div class="stat-value text-green" id="stat-readiness">
+      {% if summary.latest_readiness %}{{ summary.latest_readiness.percentage_score | round(1) }}%{% else %}—{% endif %}
     </div>
+    <div class="stat-sub">latest score</div>
   </div>
 </div>
 
-<!-- Charts Row -->
-<div class="row g-4 mb-4 fade-in">
-  <div class="col-md-6">
-    <div class="kcard">
-      <div class="kcard-header">
-        <div class="kcard-icon" style="background:rgba(59,130,246,.15);">🚨</div>
-        <h5>Alarms by Severity</h5>
-      </div>
-      <div id="chart-alarm-severity" style="height:260px;"></div>
-    </div>
+<!-- ══ Pipeline Control Panel ════════════════════════════════════════════ -->
+<div class="kcard mb-4 fade-in">
+  <div class="kcard-header">
+    <div class="kcard-icon" style="background:rgba(59,130,246,.15);">⚡</div>
+    <h5>Live Pipeline — Execute Each Step in Sequence</h5>
   </div>
-  <div class="col-md-6">
-    <div class="kcard">
-      <div class="kcard-header">
-        <div class="kcard-icon" style="background:rgba(245,158,11,.15);">🔥</div>
-        <h5>Incidents by Component</h5>
+
+  <div class="pipeline-grid">
+
+    <!-- ── Step 1: Load Data ── -->
+    <div class="pipeline-step" id="step-data">
+      <div class="step-number">Step 1</div>
+      <div class="step-icon">📦</div>
+      <div class="step-title">Load Data</div>
+      <div class="step-desc">
+        Scan RData files, count simulation runs, sensor variables,
+        observations, and baseline thresholds from PostgreSQL.
       </div>
-      <div id="chart-incidents-component" style="height:260px;"></div>
+      <span class="step-badge step-pending" id="step-data-badge">⬜ Pending</span>
+      <button class="btn-pipeline btn-primary" id="btn-load-data" onclick="runLoadData()">
+        📦 Load Data
+      </button>
+      <!-- Progress bar (hidden until button clicked) -->
+      <div class="progress-box" id="load-progress-box" style="display:none;">
+        <div class="progress-header">
+          <span id="load-stage-current">Initialising…</span>
+          <span id="load-progress-pct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="load-progress-bar"></div>
+        </div>
+        <div class="stage-log" id="load-stage-log"></div>
+      </div>
     </div>
-  </div>
+
+    <!-- ── Step 2: Generate Alarms ── -->
+    <div class="pipeline-step" id="step-alarm">
+      <div class="step-number">Step 2</div>
+      <div class="step-icon">🚨</div>
+      <div class="step-title">Generate Alarms</div>
+      <div class="step-desc">
+        Compare faulty sensor readings against fault-free baselines.
+        Every threshold breach creates an alarm event in the database.
+      </div>
+      <span class="step-badge step-pending" id="step-alarm-badge">⬜ Pending</span>
+      <button class="btn-pipeline btn-primary" id="btn-generate-alarms" onclick="runGenerateAlarms()">
+        🚨 Generate Alarms
+      </button>
+      <div id="alarm-result" style="display:none;margin-top:.4rem;"></div>
+    </div>
+
+    <!-- ── Step 3: Group Incidents ── -->
+    <div class="pipeline-step" id="step-incident">
+      <div class="step-number">Step 3</div>
+      <div class="step-icon">🔥</div>
+      <div class="step-title">Group Incidents</div>
+      <div class="step-desc">
+        Cluster simultaneous alarms from the same component into
+        single Incidents — reducing 85 K alarms to manageable events.
+      </div>
+      <span class="step-badge step-pending" id="step-incident-badge">⬜ Pending</span>
+      <button class="btn-pipeline btn-primary" id="btn-group-incidents" onclick="runGroupIncidents()">
+        🔥 Group Incidents
+      </button>
+      <div id="incident-result" style="display:none;margin-top:.4rem;"></div>
+    </div>
+
+    <!-- ── Step 4: Readiness Assessment ── -->
+    <div class="pipeline-step" id="step-readiness-step">
+      <div class="step-number">Step 4</div>
+      <div class="step-icon">📋</div>
+      <div class="step-title">Assess Readiness</div>
+      <div class="step-desc">
+        Auto-evaluate infrastructure readiness based on incident severity,
+        simulation history, and sensor coverage.
+      </div>
+      <span class="step-badge step-pending" id="step-readiness-badge">⬜ Pending</span>
+      <button class="btn-pipeline btn-primary" id="btn-run-readiness" onclick="runReadiness()">
+        📋 Run Assessment
+      </button>
+      <div id="readiness-result" style="display:none;margin-top:.4rem;"></div>
+    </div>
+
+  </div><!-- /pipeline-grid -->
 </div>
 
-<!-- Recent Activity + Readiness -->
-<div class="row g-4 fade-in">
-  <div class="col-md-8">
-    <div class="kcard">
-      <div class="kcard-header">
-        <div class="kcard-icon" style="background:rgba(16,185,129,.15);">📈</div>
-        <h5>Recent Incidents</h5>
-      </div>
-      {% if summary.recent_incidents %}
-        {% for inc in summary.recent_incidents %}
-        <div class="incident-card {{ inc.severity }}" style="margin-bottom:.75rem;">
-          <div class="d-flex justify-content-between align-items-start">
-            <strong style="font-size:.9375rem;">{{ inc.title }}</strong>
-            <span class="badge-severity badge-{{ inc.severity }}">{{ inc.severity }}</span>
-          </div>
-          <div class="incident-meta">
-            <span class="meta-chip">⏱ t={{ inc.first_time_step }}–{{ inc.last_time_step }}</span>
-            <span class="meta-chip">🔔 {{ inc.raw_alarm_count }} alarms</span>
-            <span class="meta-chip">{{ inc.status }}</span>
-          </div>
-        </div>
-        {% endfor %}
-      {% else %}
-        <div class="kalert kalert-info">No incidents yet. Run the alarm pipeline to generate incidents.</div>
-      {% endif %}
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="kcard mb-4">
-      <div class="kcard-header">
-        <div class="kcard-icon" style="background:rgba(139,92,246,.15);">📋</div>
-        <h5>Latest Readiness</h5>
-      </div>
-      {% if summary.latest_readiness %}
-        <div style="text-align:center;padding:.5rem 0;">
-          <div class="stat-value" style="font-size:2.5rem;{% if summary.latest_readiness.percentage_score >= 75 %}color:var(--accent-green){% elif summary.latest_readiness.percentage_score >= 50 %}color:var(--accent-amber){% else %}color:var(--accent-red){% endif %}">
-            {{ summary.latest_readiness.percentage_score | round(1) }}%
-          </div>
-          <div class="stat-sub mt-1">{{ summary.latest_readiness.title }}</div>
-        </div>
-        <div class="score-meter mt-2">
-          <div class="score-fill" style="width:{{ summary.latest_readiness.percentage_score }}%;"></div>
-        </div>
-        <div class="text-muted mt-2" style="font-size:.75rem;">
-          {{ summary.latest_readiness.created_at.strftime('%Y-%m-%d %H:%M') }}
-        </div>
-      {% else %}
-        <div class="kalert kalert-info">No readiness assessment yet.</div>
-        <a href="{{ url_for('pages.readiness') }}" class="kbtn kbtn-primary mt-3" style="width:100%;justify-content:center;">Run Assessment</a>
-      {% endif %}
-    </div>
-    <div class="kcard">
-      <div class="kcard-header">
-        <div class="kcard-icon" style="background:rgba(6,182,212,.15);">ℹ️</div>
-        <h5>Data Scope</h5>
-      </div>
-      <div style="font-size:.8125rem;color:var(--text-secondary);line-height:1.7;">
-        <div>📁 <strong style="color:var(--text-primary);">{{ summary.total_files }}</strong> RData files loaded</div>
-        <div>🔬 <strong style="color:var(--text-primary);">{{ summary.total_variables }}</strong> sensor variables</div>
-        <div>📊 <strong style="color:var(--text-primary);">{{ summary.total_observations }}</strong> observations</div>
-      </div>
-      <div class="kalert kalert-warning mt-3" style="font-size:.75rem;">
-        ⚠️ Tennessee Eastman Process data. Not real maritime infrastructure.
-      </div>
-    </div>
-  </div>
-</div>
 {% endblock %}
 
 {% block extra_scripts %}
-<script>
-const PLOTLY_DARK = {
-  paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-  font: { color: '#94a3b8', family: 'Inter, sans-serif', size: 12 },
-  margin: { t: 20, b: 40, l: 50, r: 20 },
-  legend: { bgcolor: 'transparent', borderwidth: 0 },
-};
-
-// Alarm severity chart
-fetch('/api/alarms?limit=2000')
-  .then(r => r.json())
-  .then(alarms => {
-    const counts = { critical: 0, warning: 0 };
-    alarms.forEach(a => { if (counts[a.severity] !== undefined) counts[a.severity]++; });
-    Plotly.newPlot('chart-alarm-severity', [{
-      type: 'bar',
-      x: ['Critical', 'Warning'],
-      y: [counts.critical, counts.warning],
-      marker: { color: ['#ef4444', '#f59e0b'] },
-      text: [counts.critical, counts.warning],
-      textposition: 'auto',
-    }], {
-      ...PLOTLY_DARK,
-      yaxis: { gridcolor: '#253148', title: 'Count' },
-      xaxis: { gridcolor: '#253148' },
-    }, { responsive: true, displayModeBar: false });
-  });
-
-// Incidents by component
-fetch('/api/incidents?limit=200')
-  .then(r => r.json())
-  .then(incidents => {
-    const compMap = {};
-    incidents.forEach(inc => {
-      const comp = inc.title || 'Unknown';
-      compMap[comp] = (compMap[comp] || 0) + 1;
-    });
-    const sorted = Object.entries(compMap).sort((a, b) => b[1] - a[1]).slice(0, 8);
-    const colors = ['#3b82f6','#06b6d4','#8b5cf6','#10b981','#f59e0b','#ef4444','#ec4899','#14b8a6'];
-    Plotly.newPlot('chart-incidents-component', [{
-      type: 'bar', orientation: 'h',
-      x: sorted.map(s => s[1]),
-      y: sorted.map(s => s[0]),
-      marker: { color: colors.slice(0, sorted.length) },
-      text: sorted.map(s => s[1]),
-      textposition: 'auto',
-    }], {
-      ...PLOTLY_DARK,
-      xaxis: { gridcolor: '#253148', title: 'Count' },
-      yaxis: { gridcolor: '#253148', automargin: true },
-    }, { responsive: true, displayModeBar: false });
-  });
-</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 {% endblock %}
