@@ -55,5 +55,4 @@ instance/
 .pytest_cache/
 
 # Local generated files
-skill.md
-project_layout.txt
+
